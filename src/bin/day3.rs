@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     hash::Hash,
     ops::{Range, RangeInclusive},
 };
@@ -84,24 +84,51 @@ fn parse_lines<'a>(s: Span<'a>) -> IResult<Span<'a>, Vec<Token<'a>>> {
     map(parse_lines, tokens)(s)
 }
 
-const DEBUG: bool = false;
-
 #[derive(Debug, Clone)]
 struct SymbolInfo {
-    location: Position,
-    // affected_rows: RangeInclusive<usize>,
-    // affected_columns: RangeInclusive<usize>,
+    location: Location,
     value: String,
-    adjacent_numbers: Vec<LocatedNumber>,
 }
 
-// impl Hash for Sy
+impl SymbolInfo {
+    fn with_line_length(token: Token, length: usize) -> Self {
+        let row = token.position.location_line() as usize - 1;
+        let column = token.position.location_offset() % length;
 
-#[derive(Debug, Clone, Copy)]
+        SymbolInfo {
+            location: Location { row, column },
+            value: token.value.to_owned(),
+        }
+    }
+    fn get_affect_range_rows(&self) -> RangeInclusive<usize> {
+        self.location.row.saturating_sub(1)..=self.location.row + 1
+    }
+    fn get_affect_range_columns(&self) -> RangeInclusive<usize> {
+        self.location.column.saturating_sub(1)..=self.location.column + 1
+    }
+    fn get_adjacent_numbers(
+        &self,
+        digit_locations: HashMap<Location, LocatedNumber>,
+    ) -> HashSet<LocatedNumber> {
+        let mut adjacent_ratios: HashSet<LocatedNumber> = HashSet::new();
+
+        for row in self.get_affect_range_rows() {
+            for column in self.get_affect_range_columns() {
+                if let Some(located_number) = digit_locations.get(&Location { row, column }) {
+                    adjacent_ratios.insert(*located_number);
+                }
+            }
+        }
+
+        return adjacent_ratios;
+    }
+}
+
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
 struct LocatedNumber {
-    start_location: Position,
+    start_location: Location,
     len: usize,
-    row: usize,
+    // row: usize,
     value: usize,
 }
 
@@ -111,9 +138,9 @@ impl LocatedNumber {
         let column = token.position.location_offset() % length;
 
         LocatedNumber {
-            start_location: Position { row, column },
+            start_location: Location { row, column },
             len: token.value.len(),
-            row,
+            // row,
             value: token
                 .value
                 .parse::<usize>()
@@ -121,36 +148,26 @@ impl LocatedNumber {
         }
     }
 
-    fn get_column_range(&self) -> Range<usize> {
+    fn get_occupied_columns_range(&self) -> Range<usize> {
         self.start_location.column..self.start_location.column + self.len
+    }
+    fn fill_occupied_locations(&self, digit_locations: &mut HashMap<Location, LocatedNumber>) {
+        for column in self.get_occupied_columns_range() {
+            digit_locations.insert(
+                Location {
+                    row: self.start_location.row,
+                    column,
+                },
+                *self,
+            );
+        }
     }
 }
 
 #[derive(Hash, PartialEq, Eq, Clone, Copy, Debug)]
-struct Position {
+struct Location {
     row: usize,
     column: usize,
-}
-
-impl SymbolInfo {
-    fn with_line_length(token: Token, length: usize) -> Self {
-        let row = token.position.location_line() as usize - 1;
-        let column = token.position.location_offset() % length;
-
-        SymbolInfo {
-            location: Position { row, column },
-            // affected_rows: row.saturating_sub(1)..=row + 1,
-            // affected_columns: column.saturating_sub(1)..=column + 1,
-            value: token.value.to_owned(),
-            adjacent_numbers: Vec::new(),
-        }
-    }
-    fn get_affect_range_rows(&self) -> RangeInclusive<usize> {
-        self.location.row.saturating_sub(1)..=self.location.row + 1
-    }
-    fn get_affect_range_columns(&self) -> RangeInclusive<usize> {
-        self.location.column.saturating_sub(1)..=self.location.column + 1
-    }
 }
 
 #[derive(Hash, PartialEq, Eq)]
@@ -158,6 +175,7 @@ struct Row(usize);
 #[derive(Hash, PartialEq, Eq)]
 struct Column(usize);
 
+const DEBUG: bool = false;
 fn main() {
     let input = include_str!("../../inputs/real/day3.txt");
     let line_length = input.lines().next().unwrap().len() + 1;
@@ -172,10 +190,15 @@ fn main() {
         }
     }
 
+    let mut digit_locations: HashMap<Location, LocatedNumber> = HashMap::new();
     let number_locations = tokens
         .iter()
         .filter(|token| token.kind == TokenType::Number)
-        .map(|token| LocatedNumber::with_line_length(*token, line_length))
+        .map(|token| {
+            let located_number = LocatedNumber::with_line_length(*token, line_length);
+            located_number.fill_occupied_locations(&mut digit_locations);
+            located_number
+        })
         .collect::<Vec<LocatedNumber>>();
 
     if DEBUG {
@@ -185,7 +208,7 @@ fn main() {
         println!();
     }
 
-    let symbol_infos = tokens
+    let symbols = tokens
         .clone()
         .iter()
         .filter(|token| token.kind == TokenType::Symbol)
@@ -193,45 +216,34 @@ fn main() {
         .collect::<Vec<SymbolInfo>>();
 
     if DEBUG {
-        for symbol_info in &symbol_infos {
+        for symbol_info in &symbols {
             println!("{symbol_info:?}");
         }
         println!();
     }
 
-    let mut affected_grid_positions: HashSet<Position> = HashSet::new();
-    // let mut affected_grid_rows: HashSet<Row> = HashSet::new();
-    // let mut affected_grid_columns: HashSet<Column> = HashSet::new();
+    let mut affected_grid_positions: HashSet<Location> = HashSet::new();
 
-    for symbol_info in &symbol_infos {
+    for symbol_info in &symbols {
         for row in symbol_info.get_affect_range_rows() {
             for column in symbol_info.get_affect_range_columns() {
-                affected_grid_positions.insert(Position { row, column });
+                affected_grid_positions.insert(Location { row, column });
             }
         }
-        // for row in affect_range.rows {
-        //     affected_grid_rows.insert(Row(row));
-        // }
-        // for column in affect_range.columns {
-        //     affected_grid_columns.insert(Column(column));
-        // }
     }
+
+    let gears = symbols
+        .clone()
+        .into_iter()
+        .filter(|symbol_range| symbol_range.value == "*")
+        .collect::<Vec<SymbolInfo>>();
 
     let answer_p1 = number_locations
         .iter()
         .filter(|located_number| {
-            // let is_affected_row = affected_grid_rows.contains(&Row(located_number.row));
-            //
-            // let mut is_affected_column = false;
-            // for column in located_number.column_start..=located_number.column_end {
-            //     if affected_grid_columns.contains(&Column(column)) {
-            //         is_affected_column = true;
-            //     }
-            // }
-
-            for column in located_number.get_column_range() {
-                if affected_grid_positions.contains(&Position {
-                    row: located_number.row,
+            for column in located_number.get_occupied_columns_range() {
+                if affected_grid_positions.contains(&Location {
+                    row: located_number.start_location.row,
                     column,
                 }) {
                     return true;
@@ -242,11 +254,19 @@ fn main() {
         })
         .map(|located_number| located_number.value)
         .sum::<usize>();
-    let gears_affect_range = symbol_infos
-        .clone()
-        .into_iter()
-        .filter(|symbol_range| symbol_range.value == "*")
-        .collect::<Vec<SymbolInfo>>();
+
+    let answer_p2 = gears
+        .iter()
+        .map(|gear| gear.get_adjacent_numbers(digit_locations.clone()))
+        .filter(|adjacents| adjacents.len() == 2)
+        .map(|adjacents| {
+            adjacents
+                .iter()
+                .map(|located_number| located_number.value)
+                .product::<usize>()
+        })
+        .sum::<usize>();
 
     println!("{answer_p1}");
+    println!("{answer_p2}");
 }
