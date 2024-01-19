@@ -108,7 +108,7 @@ impl SymbolInfo {
     }
     fn get_adjacent_numbers(
         &self,
-        digit_locations: HashMap<Location, LocatedNumber>,
+        digit_locations: &HashMap<Location, LocatedNumber>,
     ) -> HashSet<LocatedNumber> {
         let mut adjacent_ratios: HashSet<LocatedNumber> = HashSet::new();
 
@@ -120,7 +120,7 @@ impl SymbolInfo {
             }
         }
 
-        return adjacent_ratios;
+        adjacent_ratios
     }
 }
 
@@ -257,7 +257,7 @@ fn main() {
 
     let answer_p2 = gears
         .iter()
-        .map(|gear| gear.get_adjacent_numbers(digit_locations.clone()))
+        .map(|gear| gear.get_adjacent_numbers(&digit_locations))
         .filter(|adjacents| adjacents.len() == 2)
         .map(|adjacents| {
             adjacents
