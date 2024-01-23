@@ -1,13 +1,13 @@
-use core::panic;
-
 use nom::{
     bytes::complete::tag,
     character::complete::{anychar, digit1, newline, space1},
     combinator::map,
     multi::{many_till, separated_list1},
-    sequence::{delimited, preceded, tuple},
+    sequence::{delimited, tuple},
     IResult,
 };
+
+use crate::types::*;
 
 fn seeds(i: &str) -> IResult<&str, Seeds> {
     let parse_seeds = delimited(
@@ -101,90 +101,6 @@ fn maps(i: &str) -> IResult<&str, Vec<AToBMap>> {
     map(parse_maps, maps)(i)
 }
 
-fn parse_input(i: &str) -> IResult<&str, (Seeds, Vec<AToBMap>)> {
+pub fn parse_input(i: &str) -> IResult<&str, (Seeds, Vec<AToBMap>)> {
     tuple((seeds, maps))(i)
-}
-
-#[derive(Debug)]
-struct Seeds(Vec<usize>);
-#[derive(Debug)]
-enum MapType {
-    None,
-    SeedToSoil,
-    SoilToFertilizer,
-    FertilizerToWater,
-    WaterToLight,
-    LightToTemperature,
-    TemperatureToHumidity,
-    HumidityToLocation,
-}
-
-#[derive(Debug)]
-struct AToBMap {
-    kind: MapType,
-    remaps: Vec<Remap>,
-}
-#[derive(Debug)]
-struct Remap {
-    dest_start: usize,
-    source_start: usize,
-    length: usize,
-}
-const DEBUG: bool = false;
-fn main() {
-    let input = include_str!("../../inputs/real/day5.txt");
-
-    let (_, (seeds, maps)) = parse_input(input).unwrap();
-
-    println!("{seeds:?}");
-    if DEBUG {
-        for map in &maps {
-            println!("{:?}", map.kind);
-            for remap in &map.remaps {
-                println!("{remap:?}");
-            }
-            println!();
-        }
-    }
-
-    let locations = seeds_to_locations(seeds, maps);
-    let answer_p1 = locations.iter().min().unwrap();
-    println!("{answer_p1}");
-}
-
-fn seeds_to_locations(seeds: Seeds, maps: Vec<AToBMap>) -> Vec<usize> {
-    let mut mapped_locations = Vec::<usize>::new();
-    for seed in &seeds.0 {
-        let mut result = *seed;
-        for map in &maps {
-            if DEBUG {
-                println!("{:?}", map.kind);
-            }
-            'remaps: for remap in &map.remaps {
-                if remap.source_start <= result
-                    && remap.source_start + remap.length >= result as usize
-                {
-                    if DEBUG {
-                        println!("{result} + ({} - {})", remap.dest_start, remap.source_start);
-                    }
-                    result = (result as i64 + (remap.dest_start as i64 - remap.source_start as i64))
-                        as usize;
-                    if DEBUG {
-                        println!("{result}");
-                    }
-                    break 'remaps;
-                }
-                if DEBUG {
-                    println!("{result}");
-                }
-            }
-        }
-        mapped_locations.push(result);
-    }
-    mapped_locations
-}
-
-fn process_seeds(seeds: Seeds) -> Vec<usize> {
-    // TODO: remove overlapping ranges
-    todo!()
 }
