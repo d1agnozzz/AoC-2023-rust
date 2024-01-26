@@ -27,14 +27,14 @@ fn seeds(i: &str) -> IResult<&str, Seeds> {
     map(parse_seeds, seeds)(i)
 }
 
-fn remap(i: &str) -> IResult<&str, Remap> {
+fn remap(i: &str) -> IResult<&str, MapRange> {
     let parse_remap = separated_list1(space1, digit1);
-    let remap = |s: Vec<&str>| -> Remap {
+    let remap = |s: Vec<&str>| -> MapRange {
         let parsed = s
             .iter()
             .map(|snum| snum.parse::<usize>().unwrap())
             .collect::<Vec<_>>();
-        Remap {
+        MapRange {
             dest_start: parsed[0],
             source_start: parsed[1],
             length: parsed[2],
@@ -44,13 +44,13 @@ fn remap(i: &str) -> IResult<&str, Remap> {
     map(parse_remap, remap)(i)
 }
 
-fn map_details(i: &str) -> IResult<&str, Vec<Remap>> {
+fn map_details(i: &str) -> IResult<&str, Vec<MapRange>> {
     separated_list1(newline, remap)(i)
 }
 
 fn a_to_b_map(i: &str) -> IResult<&str, AToBMap> {
     let parse_map = many_till(anychar, map_details);
-    let a_to_b_map = |(_, remaps): (_, Vec<Remap>)| -> AToBMap {
+    let a_to_b_map = |(_, remaps): (_, Vec<MapRange>)| -> AToBMap {
         AToBMap {
             kind: MapType::None,
             remaps,

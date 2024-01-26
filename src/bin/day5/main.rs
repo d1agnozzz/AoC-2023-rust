@@ -4,7 +4,7 @@ mod types;
 use parsing::parse_input;
 use types::*;
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 fn main() {
     let input = include_str!("../../../inputs/real/day5.txt");
 
@@ -21,41 +21,16 @@ fn main() {
         }
     }
 
-    let locations = seeds_to_locations(seeds, maps);
-    let answer_p1 = locations.iter().min().unwrap();
+    let locations = seeds.map_to_locations(&maps);
+    let answer_p1 = locations.values().min().unwrap();
+    let mut seeds_ranges = seeds.to_seeds_ranges();
+    let seeds_count = seeds_ranges.0.iter().map(|r| r.len()).sum::<usize>();
+    let merged = seeds_ranges.remove_overlapping();
+    let merged_count = merged.0.iter().map(|r| r.len()).sum::<usize>();
+    dbg!(&locations);
     println!("{answer_p1}");
-}
-
-fn seeds_to_locations(seeds: Seeds, maps: Vec<AToBMap>) -> Vec<usize> {
-    let mut mapped_locations = Vec::<usize>::new();
-    for seed in &seeds.0 {
-        let mut result = *seed;
-        for map in &maps {
-            if DEBUG {
-                println!("{:?}", map.kind);
-            }
-            'remaps: for remap in &map.remaps {
-                if remap.source_start <= result
-                    && remap.source_start + remap.length >= result as usize
-                {
-                    if DEBUG {
-                        println!("{result} + ({} - {})", remap.dest_start, remap.source_start);
-                    }
-                    result = (result as i64 + (remap.dest_start as i64 - remap.source_start as i64))
-                        as usize;
-                    if DEBUG {
-                        println!("{result}");
-                    }
-                    break 'remaps;
-                }
-                if DEBUG {
-                    println!("{result}");
-                }
-            }
-        }
-        mapped_locations.push(result);
-    }
-    mapped_locations
+    println!("seeds count: {seeds_count}");
+    println!("after merging overlaps: {merged_count}");
 }
 
 fn process_seeds(seeds: Seeds) -> Vec<usize> {
