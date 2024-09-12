@@ -1,3 +1,4 @@
+mod index_tree;
 mod parsing;
 mod types;
 
@@ -13,9 +14,9 @@ fn main() {
     println!("{seeds:?}");
     if DEBUG {
         for map in &maps {
-            println!("{:?}", map.kind);
-            for remap in &map.remaps {
-                println!("{remap:?}");
+            println!("{:?}", map.relation);
+            for map_range in &map.map_ranges {
+                println!("{map_range:?}");
             }
             println!();
         }
@@ -28,7 +29,7 @@ fn main() {
     let merged = seeds_ranges.remove_overlapping();
     let merged_count = merged.0.iter().map(|r| r.len()).sum::<usize>();
     dbg!(&locations);
-    println!("{answer_p1}");
+    println!("{0}", answer_p1.value);
     println!("seeds count: {seeds_count}");
     println!("after merging overlaps: {merged_count}");
 }

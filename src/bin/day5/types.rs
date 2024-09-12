@@ -1,27 +1,71 @@
+use super::DEBUG;
+use itertools::Itertools;
+use std::collections::HashMap;
+use std::ops::Range;
 #[derive(Debug)]
 pub struct Seeds(pub Vec<usize>);
 
-// #[derive(Clone, Copy, PartialEq)]
-// pub struct SeedsRange {
-//     start: usize,
-//     len: usize,
-// }
+impl Seeds {
+    pub fn to_seeds_ranges(&self) -> SeedsRanges {
+        assert!(self.0.len() % 2 == 0);
 
-// impl SeedsRange {
-//     fn end(&self) -> usize {
-//         self.start + self.len
-//     }
-//     pub fn count_seeds(&self) -> usize {
-//         self.len
-//     }
-//     fn extend(&mut self, other: &Self) {
-//         assert!(other.start >= self.start && other.start <= self.end());
-//
-//         let start_diff = other.start - self.start;
-//
-//         self.len = other.len + start_diff;
-//     }
-// }
+        SeedsRanges(
+            self.0
+                .iter()
+                .tuples::<(_, _)>()
+                .map(|(start, len)| (*start..start + len + 1))
+                .collect(),
+        )
+    }
+
+    pub fn map_to_locations(&self, mappings: &[FarmingMap]) -> HashMap<ItemValue, ItemValue> {
+        let mut mapped_locations = HashMap::<ItemValue, ItemValue>::new();
+        for seed in &self.0 {
+            let mut seed_item = ItemValue {
+                item: Item::Seed,
+                value: *seed,
+            };
+
+            let mut current_mapped = seed_item;
+            for mapping in mappings {
+                if DEBUG {
+                    println!(
+                        "{:?} to {:?}",
+                        mapping.relation.from_type, mapping.relation.to_type
+                    );
+                }
+                current_mapped = mapping.map(&current_mapped);
+                if DEBUG {
+                    println!("{current_mapped:?}");
+                }
+            }
+            mapped_locations.insert(seed_item, current_mapped);
+        }
+        mapped_locations
+    }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+pub struct SeedsRange {
+    start: usize,
+    len: usize,
+}
+
+impl SeedsRange {
+    fn end(&self) -> usize {
+        self.start + self.len
+    }
+    pub fn count_seeds(&self) -> usize {
+        self.len
+    }
+    fn extend(&mut self, other: &Self) {
+        assert!(other.start >= self.start && other.start <= self.end());
+
+        let start_diff = other.start - self.start;
+
+        self.len = other.len + start_diff;
+    }
+}
 
 pub struct SeedsRanges(pub Vec<Range<usize>>);
 
@@ -56,45 +100,80 @@ impl SeedsRanges {
     }
 }
 
-use std::collections::HashMap;
-use std::ops::Range;
+#[derive(PartialEq, Clone, Copy, Debug, Eq, Hash)]
+pub enum Item {
+    Undefined,
+    Seed,
+    Soil,
+    Fertilizer,
+    Water,
+    Light,
+    Temperature,
+    Humidity,
+    Location,
+}
 
-use super::DEBUG;
-use itertools::Itertools;
-impl Seeds {
-    pub fn to_seeds_ranges(&self) -> SeedsRanges {
-        assert!(self.0.len() % 2 == 0);
+use std::str::FromStr;
+impl FromStr for Item {
+    type Err = ();
 
-        SeedsRanges(
-            self.0
-                .iter()
-                .tuples::<(_, _)>()
-                .map(|(start, len)| (*start..start + len + 1))
-                .collect(),
-        )
-    }
-
-    pub fn map_to_locations(&self, mappings: &[AToBMap]) -> HashMap<usize, usize> {
-        let mut mapped_locations = HashMap::<usize, usize>::new();
-        for seed in &self.0 {
-            let mut current_mapped = *seed;
-            for mapping in mappings {
-                if DEBUG {
-                    println!("{:?}", mapping.kind);
-                }
-                current_mapped = mapping.map(current_mapped);
-                if DEBUG {
-                    println!("{current_mapped}");
-                }
-            }
-            mapped_locations.insert(*seed, current_mapped);
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "seed" => Ok(Self::Seed),
+            "soil" => Ok(Self::Soil),
+            "fertilizer" => Ok(Self::Fertilizer),
+            "water" => Ok(Self::Water),
+            "light" => Ok(Self::Light),
+            "temperature" => Ok(Self::Temperature),
+            "humidity" => Ok(Self::Humidity),
+            "location" => Ok(Self::Location),
+            _ => Err(()),
         }
-        mapped_locations
+    }
+}
+
+use derivative::Derivative;
+#[derive(Derivative)]
+#[derivative(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct ItemValue {
+    #[derivative(PartialOrd = "ignore", Ord = "ignore")]
+    pub item: Item,
+    pub value: usize,
+}
+
+#[derive(Debug)]
+pub struct MapRelation {
+    pub from_type: Item,
+    pub to_type: Item,
+}
+
+pub struct FarmingMap {
+    pub relation: MapRelation,
+    pub map_ranges: Vec<MapDetails>,
+}
+impl FarmingMap {
+    fn map(&self, item_value: &ItemValue) -> ItemValue {
+        assert!(item_value.item == self.relation.from_type);
+        for map_range in &self.map_ranges {
+            if map_range.source_start <= item_value.value
+                && item_value.value <= map_range.source_end()
+            {
+                let result = item_value.value + map_range.dest_start - map_range.source_start;
+                return ItemValue {
+                    item: self.relation.to_type,
+                    value: result,
+                };
+            }
+        }
+        ItemValue {
+            item: self.relation.to_type,
+            value: item_value.value,
+        }
     }
 }
 
 #[derive(Debug)]
-pub enum MapType {
+pub enum MapTypes {
     None,
     SeedToSoil,
     SoilToFertilizer,
@@ -107,8 +186,8 @@ pub enum MapType {
 
 #[derive(Debug)]
 pub struct AToBMap {
-    pub kind: MapType,
-    pub remaps: Vec<MapRange>,
+    pub kind: MapTypes,
+    pub remaps: Vec<MapDetails>,
 }
 impl AToBMap {
     fn map(&self, value: usize) -> usize {
@@ -145,16 +224,40 @@ impl AToBMap {
         effective_mappings
     }
 }
+
+#[derive(PartialEq, Eq)]
+pub struct ClosedInterval {
+    pub low: usize,
+    pub high: usize,
+}
+impl ClosedInterval {
+    pub fn new(first: usize, second: usize) -> Self {
+        ClosedInterval {
+            low: first,
+            high: second,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
-pub struct MapRange {
+pub struct MapDetails {
     pub dest_start: usize,
     pub source_start: usize,
     pub length: usize,
 }
 
-impl MapRange {
+impl MapDetails {
+    fn source_interval(&self) -> ClosedInterval {
+        ClosedInterval::new(self.source_start, self.source_end())
+    }
+    fn dest_interval(&self) -> ClosedInterval {
+        ClosedInterval::new(self.dest_start, self.dest_end())
+    }
     fn source_end(&self) -> usize {
         self.source_start + self.length
+    }
+    fn dest_end(&self) -> usize {
+        self.dest_start + self.length
     }
     fn trim_start_to(&mut self, value: usize) {
         assert!(value >= self.source_start);
