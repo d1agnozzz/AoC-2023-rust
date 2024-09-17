@@ -225,7 +225,7 @@ impl AToBMap {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub struct ClosedInterval {
     pub low: usize,
     pub high: usize,
@@ -236,6 +236,12 @@ impl ClosedInterval {
             low: first,
             high: second,
         }
+    }
+    pub fn overlaps(&self, other: &ClosedInterval) -> bool {
+        if self.low <= other.high && self.high >= other.low {
+            return true;
+        }
+        false
     }
 }
 

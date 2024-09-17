@@ -3,7 +3,6 @@ use nom::error::ParseError;
 use super::types::ClosedInterval;
 use std::collections::HashMap;
 type NodeHandle = usize;
-type TreeHandle = usize;
 
 pub struct IntervalTree {
     root: Option<NodeHandle>,
@@ -12,33 +11,55 @@ pub struct IntervalTree {
 }
 
 impl IntervalTree {
+    pub fn node_count(&self) -> usize {
+        assert!(self.count != 0 || self.root.is_some());
+        self.count
+    }
     pub fn insert(&mut self, data: NodeData) -> bool {
-        if let None = self.root {
-            self.root = Some(self.alloc_node(data, 0));
-        } else if !self.insert_at(self.root.unwrap(), data) {
-            return false;
+        match self.root {
+            None => {
+                self.root = Some(self.alloc_node(data, 0));
+            }
+            Some(n) => {
+                let inserted = self.insert_at(n, data);
+                return inserted != n;
+            }
         }
         self.count += 1;
         true
     }
 
-    fn insert_at(&mut self, at_node: NodeHandle, data: NodeData) -> bool {
+    fn insert_at(&mut self, at_node: NodeHandle, data: NodeData) -> NodeHandle {
         if data == self.nodes[&at_node].data {
-            return false;
+            return at_node;
         }
-        if data.self_interval.low < self.nodes[&at_node].data.self_interval.low {
-            if self.nodes[&at_node].left.is_none() {
-                self.nodes.get_mut(&at_node).unwrap().left = Some(self.alloc_node(data, at_node));
-                true
-            } else {
-                self.insert_at(self.nodes[&at_node].left.unwrap(), data)
+
+        if data.original_interval.low < self.nodes[&at_node].data.original_interval.low {
+            match self.nodes[&at_node].left {
+                None => {
+                    self.nodes.get_mut(&at_node).unwrap().left =
+                        Some(self.alloc_node(data, at_node));
+                }
+                Some(n) => {
+                    self.insert_at(n, data);
+                }
+            };
+        }
+
+        match self.nodes[&at_node].right {
+            None => {
+                self.nodes.get_mut(&at_node).unwrap().right = Some(self.alloc_node(data, at_node));
             }
-        } else if self.nodes[&at_node].right.is_none() {
-            self.nodes.get_mut(&at_node).unwrap().right = Some(self.alloc_node(data, at_node));
-            true
-        } else {
-            self.insert_at(self.nodes[&at_node].right.unwrap(), data)
+            Some(n) => {
+                self.insert_at(n, data);
+            }
+        };
+
+        if self.nodes[&at_node].max_value < data.original_interval.high {
+            self.nodes.get_mut(&at_node).unwrap().max_value = data.original_interval.high;
         }
+
+        at_node
     }
 
     fn alloc_node(&mut self, data: NodeData, parent: NodeHandle) -> NodeHandle {
@@ -46,13 +67,39 @@ impl IntervalTree {
             .insert(self.count, Node::new_with_parent(data, parent));
         self.nodes.len() - 1
     }
+    fn find_node(&self, from_node: NodeHandle, data: NodeData) -> Option<NodeHandle> {
+        if from_node == 0 {
+            return None;
+        }
+
+        let node = &self.nodes.get(&from_node)?;
+        if node.data == data {
+            Some(from_node)
+        } else if node
+            .data
+            .original_interval
+            .overlaps(&data.original_interval)
+        {
+            match node.left {
+                None => None,
+                _ => self.find_node(node.left?, data),
+            }
+        } else {
+            match node.right {
+                Node => None,
+                _ => self.find_node(node.right?, data),
+            }
+        }
+    }
+    // fn remove(&mut self, data: NodeData) -> bool {
+    // if let Some(node) = self.find_node
+    // }
 }
 
-#[derive(PartialEq)]
-struct NodeData {
-    self_interval: ClosedInterval,
-    other_tree: TreeHandle,
-    other_interval: NodeHandle,
+#[derive(PartialEq, Eq, Clone, Copy)]
+pub struct NodeData {
+    original_interval: ClosedInterval,
+    mapped_interval: ClosedInterval,
 }
 
 struct Node {
@@ -66,7 +113,7 @@ struct Node {
 impl Node {
     fn new(data: NodeData) -> Self {
         Self {
-            max_value: data.self_interval.high,
+            max_value: data.original_interval.high,
             data,
             left: None,
             right: None,
@@ -75,7 +122,7 @@ impl Node {
     }
     fn new_with_parent(data: NodeData, parent: NodeHandle) -> Self {
         Self {
-            max_value: data.self_interval.high,
+            max_value: data.original_interval.high,
             data,
             left: None,
             right: None,
