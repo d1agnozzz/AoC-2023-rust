@@ -44,16 +44,17 @@ impl IntervalTree {
                     self.insert_at(n, data);
                 }
             };
+        } else {
+            match self.nodes[&at_node].right {
+                None => {
+                    self.nodes.get_mut(&at_node).unwrap().right =
+                        Some(self.alloc_node(data, at_node));
+                }
+                Some(n) => {
+                    self.insert_at(n, data);
+                }
+            };
         }
-
-        match self.nodes[&at_node].right {
-            None => {
-                self.nodes.get_mut(&at_node).unwrap().right = Some(self.alloc_node(data, at_node));
-            }
-            Some(n) => {
-                self.insert_at(n, data);
-            }
-        };
 
         if self.nodes[&at_node].max_value < data.original_interval.high {
             self.nodes.get_mut(&at_node).unwrap().max_value = data.original_interval.high;
@@ -67,10 +68,9 @@ impl IntervalTree {
             .insert(self.count, Node::new_with_parent(data, parent));
         self.nodes.len() - 1
     }
+
     fn find_node(&self, from_node: NodeHandle, data: NodeData) -> Option<NodeHandle> {
-        if from_node == 0 {
-            return None;
-        }
+        self.root?;
 
         let node = &self.nodes.get(&from_node)?;
         if node.data == data {
@@ -86,10 +86,25 @@ impl IntervalTree {
             }
         } else {
             match node.right {
-                Node => None,
+                None => None,
                 _ => self.find_node(node.right?, data),
             }
         }
+    }
+
+    fn query_by_containing_point(
+        &self,
+        from_node: NodeHandle,
+        point: usize,
+        mut result: Vec<NodeHandle>,
+    ) -> Option<Vec<NodeHandle>> {
+        self.root?;
+
+        let node = &self.nodes.get(&from_node)?;
+        if node.data.original_interval.contains(point) {
+            result.push(from_node);
+        }
+        todo!()
     }
     // fn remove(&mut self, data: NodeData) -> bool {
     // if let Some(node) = self.find_node

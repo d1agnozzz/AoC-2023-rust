@@ -243,6 +243,9 @@ impl ClosedInterval {
         }
         false
     }
+    pub fn contains(&self, number: usize) -> bool {
+        self.low <= number && number <= self.high
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
